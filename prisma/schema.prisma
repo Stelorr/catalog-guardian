@@ -57,6 +57,9 @@ model ScanResult {
   description   String?
   actualValue   String?
   status        ScanResultStatus
+  // Set when a normalizer rule saw an outlier it couldn't safely fix
+  // (e.g. a different unit). Recomputed on every scan.
+  flagReason    String?
   lastCheckedAt DateTime         @default(now())
   scanRunId     String
   scanRun       ScanRun          @relation(fields: [scanRunId], references: [id], onDelete: Cascade)
@@ -80,4 +83,49 @@ model ScanRun {
 
   @@index([shop, status])
   @@index([shop, startedAt])
+}
+
+enum FixProposalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  APPLIED
+  FAILED
+  // The value changed in Shopify since the scan, so the proposal was not
+  // applied. Means "re-scan", not an error.
+  STALE
+}
+
+enum FixRuleType {
+  UNIT
+  CASING
+  NAMING
+}
+
+// Denormalized on purpose, with no relation to ScanResult or ScanRun:
+// deleting a ScanRun cascades to its ScanResults, and that must not take
+// decided proposals or the original values needed for undo with it.
+model FixProposal {
+  id            String            @id @default(cuid())
+  shop          String
+  productId     String
+  productTitle  String
+  namespace     String
+  key           String
+  valueType     String
+  ruleType      FixRuleType
+  ruleDetail    String
+  // The value seen at scan time: compared before applying (STALE check)
+  // and written back on undo.
+  originalValue String
+  proposedValue String
+  status        FixProposalStatus @default(PENDING)
+  errorMessage  String?
+  scanRunId     String
+  createdAt     DateTime          @default(now())
+  decidedAt     DateTime?
+  appliedAt     DateTime?
+
+  @@index([shop, status])
+  @@index([shop, productId, namespace, key])
 }

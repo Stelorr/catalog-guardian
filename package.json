@@ -17,6 +17,7 @@
     "prisma": "prisma",
     "scan": "node --env-file=.env scripts/run-scan.js",
     "test:classify": "node scripts/test-classify.js",
+    "test:normalize": "node scripts/test-normalize.js",
     "graphql-codegen": "graphql-codegen",
     "vite": "vite",
     "typecheck": "react-router typegen && tsc --noEmit"
