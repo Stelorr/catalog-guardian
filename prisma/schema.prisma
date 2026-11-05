@@ -1,0 +1,83 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
+// enough when changing adapters.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+datasource db {
+  provider = "sqlite"
+  url      = "file:dev.sqlite"
+}
+
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+enum ScanResultStatus {
+  OK
+  MISSING
+  EMPTY
+  TYPE_MISMATCH
+}
+
+enum ScanRunStatus {
+  RUNNING
+  COMPLETE
+  FAILED
+}
+
+model ScanResult {
+  id            String           @id @default(cuid())
+  shop          String
+  productId     String
+  productTitle  String
+  namespace     String
+  key           String
+  expectedType  String
+  description   String?
+  actualValue   String?
+  status        ScanResultStatus
+  lastCheckedAt DateTime         @default(now())
+  scanRunId     String
+  scanRun       ScanRun          @relation(fields: [scanRunId], references: [id], onDelete: Cascade)
+
+  @@unique([shop, productId, namespace, key])
+  @@index([shop, status])
+  @@index([shop, key])
+  @@index([scanRunId, status])
+}
+
+model ScanRun {
+  id                   String        @id @default(cuid())
+  shop                 String
+  startedAt            DateTime      @default(now())
+  completedAt          DateTime?
+  totalProductsScanned Int           @default(0)
+  totalIssuesFound     Int           @default(0)
+  status               ScanRunStatus @default(RUNNING)
+  errorMessage         String?
+  results              ScanResult[]
+
+  @@index([shop, status])
+  @@index([shop, startedAt])
+}
