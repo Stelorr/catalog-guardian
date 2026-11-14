@@ -31,10 +31,38 @@ then lets the merchant bulk-fix them.
 
 ## Data model note
 
-Scan results will be stored locally (see Phase 3) so the dashboard
-doesn't have to re-query Shopify on every page load.
+Data lives in SQLite via Prisma (`prisma/schema.prisma`) so the dashboard
+doesn't have to re-query Shopify on every page load:
+
+- `ScanRun`: one row per scan. A run that fails saves its reason in
+  `errorMessage`. A RUNNING run older than 5 minutes is treated as FAILED,
+  so a server restart can't block new scans.
+- `ScanResult`: one row per product and metafield definition, upserted on
+  every scan. `status` is OK, MISSING, EMPTY or TYPE_MISMATCH. `flagReason`
+  is set when a normalizer rule saw an outlier it couldn't safely fix.
+- `FixProposal`: a suggested UNIT, CASING or NAMING fix for an OK value,
+  generated after each complete scan. A scan replaces only PENDING rows;
+  APPROVED, REJECTED, APPLIED, FAILED and STALE rows are never touched.
+  `originalValue` is the scanned value. Applying re-reads the value from
+  Shopify and writes with `compareDigest`, so a value changed since the scan
+  ends STALE and is never overwritten. Rows have no foreign keys, so
+  deleting scan data can't remove decided proposals.
+
+After any `prisma generate` (including the one `prisma migrate dev` runs),
+restart `shopify app dev`: the running server keeps the old client.
 
 ## Testing approach
 
-There is no automated test suite yet. After every feature, list manual
-checks to run against a dev store using `shopify app dev`.
+There is no test framework. Checks are plain Node scripts that exit
+non-zero on failure:
+
+- `npm run test:classify`: scan status classification (`classifyMetafield`).
+- `npm run test:normalize`: the normalizer rules (`proposeForField`). Every
+  value in each fixture is checked, so a spurious proposal fails too.
+- `npm run test:stale -- <shop>.myshopify.com`: interactive, against a dev
+  store. You edit a metafield in the admin while it waits; it confirms the
+  apply path ends STALE and overwrites nothing.
+
+Run the first two and `npm run lint` after every change. After every
+feature, also list manual checks to run against a dev store using
+`shopify app dev`.

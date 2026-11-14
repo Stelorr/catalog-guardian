@@ -9,6 +9,8 @@
 // v1 covers single-value metafields only. v2 candidates: list.* types
 // (normalize each element) and product titles.
 
+import prisma from "../db.server.js";
+
 const MIN_SAMPLE = 5;
 const DOMINANT_SHARE = 0.6;
 
@@ -197,11 +199,27 @@ function textNamingRule(entries) {
 
   // 2. Everything else: collapse stray whitespace, and apply the field's
   // majority casing style when the value is made of plain words.
+  //
+  // Only values written entirely in one style are re-cased: all lowercase,
+  // or all Title Case when the majority is lowercase. A mixed value such as
+  // sentence case ("Bamboo core") is usually written that way on purpose, so
+  // it's left alone.
+  //
+  // Known limitations:
+  // - The majority counts occurrences, not distinct values, so one value
+  //   repeated across many products ("Recycled Aluminum" x5) can make up
+  //   most of it.
+  // - A one-word value ("Wood") reads as Title Case and adds to that side of
+  //   the vote, though it's equally valid sentence case.
+  // - Brand names written in lowercase ("iphone blue") can't be told apart
+  //   from plain words, so they'd be re-cased like any other word.
   const styles = entries.map((e) => valueStyle(collapseSpaces(e.value)));
   const { top: style, count: styleCount } = topCount(
     styles.filter((s) => s === "lower" || s === "title" || s === "upper"),
   );
   const dominantStyle = style && styleCount >= entries.length * DOMINANT_SHARE ? style : null;
+  const canRecase = (valueStyleName) =>
+    valueStyleName === "lower" || (valueStyleName === "title" && dominantStyle === "lower");
 
   entries.forEach((entry, i) => {
     if (handled.has(entry)) return;
@@ -219,7 +237,7 @@ function textNamingRule(entries) {
         });
         return;
       }
-      proposed = applyStyle(proposed, dominantStyle);
+      if (canRecase(styles[i])) proposed = applyStyle(proposed, dominantStyle);
     }
 
     if (proposed === entry.value) return;
@@ -263,4 +281,71 @@ export function proposeForField(field) {
     })),
     flags: result.flags.map(({ entry, reason }) => ({ productId: entry.productId, reason })),
   };
+}
+
+const targetKey = (p) => `${p.productId}|${p.namespace}|${p.key}`;
+
+// Regenerates this shop's proposals from one completed scan run. Only
+// PENDING proposals are replaced; decided ones are never touched. A target
+// that already has an APPROVED proposal gets no new one, and a proposal the
+// merchant REJECTED isn't recreated unless the value has changed since.
+// Expects the scan's upsert to have reset flagReason to null on its rows.
+export async function generateProposals({ shop, scanRunId }) {
+  const rows = await prisma.scanResult.findMany({
+    where: { shop, scanRunId, status: "OK" },
+  });
+
+  const fields = new Map();
+  for (const row of rows) {
+    const id = `${row.namespace}.${row.key}`;
+    if (!fields.has(id)) {
+      fields.set(id, { namespace: row.namespace, key: row.key, type: row.expectedType, values: [] });
+    }
+    fields.get(id).values.push({
+      productId: row.productId,
+      productTitle: row.productTitle,
+      value: row.actualValue,
+    });
+  }
+
+  const decided = await prisma.fixProposal.findMany({
+    where: { shop, status: { in: ["APPROVED", "REJECTED"] } },
+    select: { productId: true, namespace: true, key: true, status: true, originalValue: true, proposedValue: true },
+  });
+  const approvedTargets = new Set(decided.filter((d) => d.status === "APPROVED").map(targetKey));
+  const rejected = new Set(
+    decided
+      .filter((d) => d.status === "REJECTED")
+      .map((d) => `${targetKey(d)}|${d.originalValue}|${d.proposedValue}`),
+  );
+
+  const proposals = [];
+  const flags = [];
+  for (const field of fields.values()) {
+    const { namespace, key, type } = field;
+    const result = proposeForField(field);
+
+    for (const p of result.proposals) {
+      const proposal = { shop, namespace, key, valueType: type, scanRunId, ...p };
+      if (approvedTargets.has(targetKey(proposal))) continue;
+      if (rejected.has(`${targetKey(proposal)}|${p.originalValue}|${p.proposedValue}`)) continue;
+      proposals.push(proposal);
+    }
+    for (const f of result.flags) flags.push({ namespace, key, ...f });
+  }
+
+  await prisma.$transaction([
+    prisma.fixProposal.deleteMany({ where: { shop, status: "PENDING" } }),
+    prisma.fixProposal.createMany({ data: proposals }),
+    ...flags.map((f) =>
+      prisma.scanResult.update({
+        where: {
+          shop_productId_namespace_key: { shop, productId: f.productId, namespace: f.namespace, key: f.key },
+        },
+        data: { flagReason: f.reason },
+      }),
+    ),
+  ]);
+
+  return { proposals: proposals.length, flags: flags.length };
 }

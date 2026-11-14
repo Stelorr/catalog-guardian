@@ -123,6 +123,48 @@ const fixtures = [
     },
   },
   {
+    // Real values from the dev store's custom.material on 2026-11-05. The
+    // first version of the style rule wrongly proposed Title Case for all 3.
+    name: "real dev-store material: sentence case is left alone",
+    field: field("material_real", "single_line_text_field", [
+      ...repeat(5, () => "Recycled Aluminum"),
+      "Wood",
+      "Bamboo core",
+      "Aluminum core with carbon fiber topsheet",
+      "Wood core with fiberglass laminate",
+    ]),
+    expect: {},
+  },
+  {
+    name: "Title Case majority: sentence-case outliers are never re-cased",
+    field: field("finish", "single_line_text_field", [
+      ...repeat(3, () => "Matte Black"),
+      ...repeat(3, () => "Brushed Steel"),
+      ...repeat(3, () => "Polished Brass"),
+      "Dark navy",
+      "Light gray heather",
+      "Hand-finished oak",
+      "Soft touch coating",
+      "brushed nickel",
+    ]),
+    expect: {
+      // Fully lowercase, so it's re-cased; the four sentence-case values
+      // above it are absent on purpose.
+      "brushed nickel": ["CASING", "Brushed Nickel"],
+    },
+  },
+  {
+    name: "lowercase majority: Title Case becomes lowercase, sentence case is left alone",
+    field: field("tag", "single_line_text_field", [
+      ...repeat(3, () => "cotton"),
+      ...repeat(3, () => "linen"),
+      ...repeat(2, () => "wool blend"),
+      "Silk Blend",
+      "Hand wash only",
+    ]),
+    expect: { "Silk Blend": ["CASING", "silk blend"] },
+  },
+  {
     name: "tie: one \"Organic Cotton\" vs one \"organic cotton\" falls back to style",
     field: field("tie", "single_line_text_field", [
       "Organic Cotton",

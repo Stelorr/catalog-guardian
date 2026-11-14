@@ -2,6 +2,7 @@ import prisma from "../db.server.js";
 import { GET_METAFIELD_DEFINITIONS } from "../graphql/getMetafieldDefinitions.js";
 import { GET_PRODUCT_METAFIELDS } from "../graphql/getProductMetafields.js";
 import { GET_PRODUCTS_WITH_METAFIELDS } from "../graphql/getProductsWithMetafields.js";
+import { generateProposals } from "./fixProposals.server.js";
 import { graphqlRequest, pauseForCapacity } from "./shopifyGraphql.server.js";
 
 // Page sizes are kept small enough that requested query cost stays well under
@@ -170,6 +171,8 @@ async function writeResults(rows) {
             status: row.status,
             lastCheckedAt: row.lastCheckedAt,
             scanRunId: row.scanRunId,
+            // Recomputed by generateProposals once the scan completes.
+            flagReason: null,
           },
         }),
       ),
@@ -313,6 +316,18 @@ export async function runScan({ admin, shop, scanRunId, log = () => {} }) {
       }
     }
 
+    // Only a complete scan generates proposals: partial data would skew the
+    // majority patterns. A failure here doesn't undo a good scan, so it's
+    // recorded on the run while the run stays COMPLETE.
+    let proposalError = null;
+    try {
+      const generated = await generateProposals({ shop, scanRunId });
+      log(`Generated ${generated.proposals} fix proposal(s) and ${generated.flags} flag(s)`);
+    } catch (error) {
+      proposalError = `[generating proposals] ${describeError(error)}`.slice(0, MAX_ERROR_LENGTH);
+      log(`Generating proposals failed: ${error.message}`);
+    }
+
     await prisma.scanRun.update({
       where: { id: scanRunId },
       data: {
@@ -320,6 +335,7 @@ export async function runScan({ admin, shop, scanRunId, log = () => {} }) {
         completedAt: new Date(),
         totalProductsScanned,
         totalIssuesFound,
+        errorMessage: proposalError,
       },
     });
 
