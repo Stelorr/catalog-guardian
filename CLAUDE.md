@@ -63,6 +63,12 @@ non-zero on failure:
   store. You edit a metafield in the admin while it waits; it confirms the
   apply path ends STALE and overwrites nothing.
 
+- `npm run seed -- <shop>.myshopify.com`: creates a deliberately messy demo
+  catalog (20 DRAFT products tagged `catalog-guardian-seed`, fields in the
+  `cg_demo` namespace) so every normalizer rule has a case. Idempotent, and
+  `--cleanup` removes the seed products. `--dry-run` checks the design
+  against the normalizer without touching Shopify.
+
 Run the first two and `npm run lint` after every change. After every
 feature, also list manual checks to run against a dev store using
 `shopify app dev`.

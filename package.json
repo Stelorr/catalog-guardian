@@ -18,6 +18,7 @@
     "scan": "node --env-file=.env scripts/run-scan.js",
     "test:classify": "node scripts/test-classify.js",
     "test:normalize": "node scripts/test-normalize.js",
+    "seed": "node --env-file=.env scripts/seed-messy-catalog.js",
     "test:stale": "node --env-file=.env scripts/test-stale-apply.js",
     "graphql-codegen": "graphql-codegen",
     "vite": "vite",
