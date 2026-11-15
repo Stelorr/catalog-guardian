@@ -4,6 +4,7 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { applyApprovedProposals } from "../services/bulkFixEngine.server";
+import { formatMetafieldValue } from "../utils/formatMetafieldValue";
 
 // Rows shown per section. "Approve all" sends exactly the visible ids, so it
 // never approves a proposal the merchant can't see.
@@ -232,10 +233,12 @@ export default function Review() {
                     {p.namespace}.{p.key}
                   </s-table-cell>
                   <s-table-cell>
-                    <s-text>&quot;{p.originalValue}&quot;</s-text>
+                    <s-text>&quot;{formatMetafieldValue(p.valueType, p.originalValue)}&quot;</s-text>
                   </s-table-cell>
                   <s-table-cell>
-                    <s-text type="strong">&quot;{p.proposedValue}&quot;</s-text>
+                    <s-text type="strong">
+                      &quot;{formatMetafieldValue(p.valueType, p.proposedValue)}&quot;
+                    </s-text>
                   </s-table-cell>
                   <s-table-cell>
                     <s-stack direction="block" gap="base">
@@ -306,7 +309,7 @@ export default function Review() {
                     {row.namespace}.{row.key}
                   </s-table-cell>
                   <s-table-cell>
-                    <s-text>&quot;{row.actualValue}&quot;</s-text>
+                    <s-text>&quot;{formatMetafieldValue(row.expectedType, row.actualValue)}&quot;</s-text>
                   </s-table-cell>
                   <s-table-cell>{row.flagReason}</s-table-cell>
                 </s-table-row>
