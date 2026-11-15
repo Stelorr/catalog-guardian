@@ -1,4 +1,4 @@
-import { formatMetafieldValue } from "../app/utils/formatMetafieldValue.js";
+import { describeFix, formatMetafieldValue } from "../app/utils/formatMetafieldValue.js";
 
 // [type, stored value, expected display text]
 const cases = [
@@ -33,5 +33,29 @@ for (const [type, value, expected] of cases) {
   console.log(`${pass ? "PASS" : "FAIL"}  ${type.padEnd(22)} ${JSON.stringify(value)} -> ${JSON.stringify(actual)}${pass ? "" : `  (expected ${JSON.stringify(expected)})`}`);
 }
 
-console.log(`\n${cases.length - failures}/${cases.length} passed`);
+// [apply result, expected line]
+const fixCases = [
+  [
+    { productTitle: "Cotton Hoodie", key: "color", valueType: "single_line_text_field", originalValue: "sage green", proposedValue: "Sage Green" },
+    'Cotton Hoodie · color: "sage green" → "Sage Green"',
+  ],
+  [
+    { productTitle: "Linen Shirt", key: "width", valueType: "single_line_text_field", originalValue: "10in", proposedValue: "10 in" },
+    'Linen Shirt · width: "10in" → "10 in"',
+  ],
+  [
+    { productTitle: "Denim Jacket", key: "weight", valueType: "weight", originalValue: '{"value":1500.0,"unit":"GRAMS"}', proposedValue: '{"value":1.5,"unit":"KILOGRAMS"}' },
+    'Denim Jacket · weight: "1500 g" → "1.5 kg"',
+  ],
+];
+
+for (const [result, expected] of fixCases) {
+  const actual = describeFix(result);
+  const pass = actual === expected;
+  if (!pass) failures++;
+  console.log(`${pass ? "PASS" : "FAIL"}  describeFix -> ${actual}${pass ? "" : `  (expected ${expected})`}`);
+}
+
+const total = cases.length + fixCases.length;
+console.log(`\n${total - failures}/${total} passed`);
 if (failures > 0) process.exitCode = 1;

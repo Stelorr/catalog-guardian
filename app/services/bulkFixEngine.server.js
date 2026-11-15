@@ -189,5 +189,14 @@ export async function applyApprovedProposals({ admin, shop, proposalIds }) {
     }),
   );
 
-  return proposals.map((p, i) => ({ id: p.id, productTitle: p.productTitle, ...outcomes[i] }));
+  // Carries what was changed so the Review page can name each fix.
+  return proposals.map((p, i) => ({
+    id: p.id,
+    productTitle: p.productTitle,
+    key: p.key,
+    valueType: p.valueType,
+    originalValue: p.originalValue,
+    proposedValue: p.proposedValue,
+    ...outcomes[i],
+  }));
 }

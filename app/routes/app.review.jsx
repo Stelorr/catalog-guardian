@@ -4,7 +4,7 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { applyApprovedProposals } from "../services/bulkFixEngine.server";
-import { formatMetafieldValue } from "../utils/formatMetafieldValue";
+import { describeFix, formatMetafieldValue } from "../utils/formatMetafieldValue";
 
 // Rows shown per section. "Approve all" sends exactly the visible ids, so it
 // never approves a proposal the merchant can't see.
@@ -151,33 +151,44 @@ export default function Review() {
           }
           heading={`Applied ${summary.applied.length} of ${applyFetcher.data.results.length} fixes`}
         >
-          <s-unordered-list>
-            <s-list-item>Applied: {summary.applied.length}</s-list-item>
-            {summary.stale.length > 0 && (
-              <s-list-item>
-                Stale, not changed because the value was edited in Shopify after the scan
-                (re-scan to refresh): {summary.stale.length}
-              </s-list-item>
-            )}
-            {summary.failed.length > 0 && (
-              <s-list-item>Failed: {summary.failed.length}</s-list-item>
-            )}
-          </s-unordered-list>
+          {summary.applied.length > 0 && (
+            <>
+              <s-paragraph>
+                <s-text type="strong">Applied ({summary.applied.length})</s-text>
+              </s-paragraph>
+              <s-unordered-list>
+                {summary.applied.map((r) => (
+                  <s-list-item key={r.id}>{describeFix(r)}</s-list-item>
+                ))}
+              </s-unordered-list>
+            </>
+          )}
           {summary.stale.length > 0 && (
-            <s-paragraph>
-              <s-text color="subdued">
-                Stale: {summary.stale.map((r) => r.productTitle).join(", ")}
-              </s-text>
-            </s-paragraph>
+            <>
+              <s-paragraph>
+                <s-text type="strong">Stale, left unchanged ({summary.stale.length})</s-text>
+                : the value was edited in Shopify after the scan. Re-scan to refresh.
+              </s-paragraph>
+              <s-unordered-list>
+                {summary.stale.map((r) => (
+                  <s-list-item key={r.id}>{describeFix(r)}</s-list-item>
+                ))}
+              </s-unordered-list>
+            </>
           )}
           {summary.failed.length > 0 && (
-            <s-unordered-list>
-              {summary.failed.map((r) => (
-                <s-list-item key={r.id}>
-                  {r.productTitle}: {r.error}
-                </s-list-item>
-              ))}
-            </s-unordered-list>
+            <>
+              <s-paragraph>
+                <s-text type="strong">Failed ({summary.failed.length})</s-text>
+              </s-paragraph>
+              <s-unordered-list>
+                {summary.failed.map((r) => (
+                  <s-list-item key={r.id}>
+                    {describeFix(r)}: {r.error}
+                  </s-list-item>
+                ))}
+              </s-unordered-list>
+            </>
           )}
         </s-banner>
       )}

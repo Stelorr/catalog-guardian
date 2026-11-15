@@ -34,3 +34,11 @@ export function formatMetafieldValue(type, value) {
     return value;
   }
 }
+
+// One line naming a fix from an apply result, e.g.
+// Cotton Hoodie · color: "sage green" → "Sage Green"
+export function describeFix({ productTitle, key, valueType, originalValue, proposedValue }) {
+  const before = formatMetafieldValue(valueType, originalValue);
+  const after = formatMetafieldValue(valueType, proposedValue);
+  return `${productTitle} · ${key}: "${before}" → "${after}"`;
+}
