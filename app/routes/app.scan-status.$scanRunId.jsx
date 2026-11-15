@@ -29,9 +29,15 @@ export const loader = async ({ request, params }) => {
     scanRun: {
       id: scanRun.id,
       status: scanRun.status,
+      startedAt: scanRun.startedAt,
+      completedAt: scanRun.completedAt,
+      errorMessage: scanRun.errorMessage,
       totalProductsScanned: scanRun.totalProductsScanned,
       totalIssuesFound: scanRun.totalIssuesFound,
     },
+    pendingProposals: await prisma.fixProposal.count({
+      where: { shop: session.shop, status: "PENDING" },
+    }),
     breakdown: breakdown.map((row) => ({
       status: row.status,
       count: row._count.status,

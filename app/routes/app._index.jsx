@@ -16,6 +16,17 @@ const STATUS_TONE = {
   OK: "success",
 };
 const POLL_INTERVAL_MS = 2000;
+const ERROR_PREVIEW_LENGTH = 400;
+
+// The saved errorMessage is "[stage] message" followed by a few stack
+// frames. Only the part before the first frame is useful here, and frames
+// would expose server file paths in the UI; the full text stays on the run.
+function describeScanError(errorMessage) {
+  const message = errorMessage.split(/\n\s+at /)[0].trim();
+  return message.length > ERROR_PREVIEW_LENGTH
+    ? `${message.slice(0, ERROR_PREVIEW_LENGTH)}…`
+    : message;
+}
 
 function toBreakdownRows(breakdown) {
   const counts = Object.fromEntries(STATUS_ORDER.map((status) => [status, 0]));
@@ -41,6 +52,9 @@ async function loadLastCompletedScan(shop) {
   return {
     id: lastRun.id,
     status: lastRun.status,
+    startedAt: lastRun.startedAt,
+    completedAt: lastRun.completedAt,
+    errorMessage: lastRun.errorMessage,
     totalProductsScanned: lastRun.totalProductsScanned,
     totalIssuesFound: lastRun.totalIssuesFound,
     breakdown: breakdown.map((row) => ({
@@ -64,13 +78,18 @@ export const loader = async ({ request }) => {
     orderBy: { startedAt: "desc" },
   });
 
+  const pendingProposals = await prisma.fixProposal.count({
+    where: { shop, status: "PENDING" },
+  });
+
   if (activeRun) {
-    return { activeScanRunId: activeRun.id, lastCompletedScan: null };
+    return { activeScanRunId: activeRun.id, lastCompletedScan: null, pendingProposals };
   }
 
   return {
     activeScanRunId: null,
     lastCompletedScan: await loadLastCompletedScan(shop),
+    pendingProposals,
   };
 };
 
@@ -104,7 +123,8 @@ export const action = async ({ request }) => {
 };
 
 export default function Index() {
-  const { activeScanRunId, lastCompletedScan } = useLoaderData();
+  const { activeScanRunId, lastCompletedScan, pendingProposals: loadedPendingProposals } =
+    useLoaderData();
   const startFetcher = useFetcher();
   const statusFetcher = useFetcher();
   const [scanRunId, setScanRunId] = useState(activeScanRunId);
@@ -143,6 +163,10 @@ export default function Index() {
 
   const isStarting = startFetcher.state !== "idle";
   const summary = statusFetcher.data?.scanRun ?? lastCompletedScan;
+  // A finished scan regenerates proposals, so prefer the count the poll
+  // returned over the one loaded with the page.
+  const pendingProposals = statusFetcher.data?.pendingProposals ?? loadedPendingProposals;
+  const finishedAt = summary ? new Date(summary.completedAt ?? summary.startedAt) : null;
   const breakdown = toBreakdownRows(
     statusFetcher.data?.breakdown ?? lastCompletedScan?.breakdown ?? [],
   );
@@ -170,13 +194,27 @@ export default function Index() {
             </s-text>
           </s-stack>
         ) : summary ? (
-          <s-paragraph>
-            {summary.status === "FAILED"
-              ? "The last scan failed before completing."
-              : "Showing results from the most recent scan."}
-          </s-paragraph>
+          <s-stack direction="inline" gap="base" alignItems="center">
+            <s-badge tone={summary.status === "FAILED" ? "critical" : "success"}>
+              {summary.status === "FAILED" ? "Failed" : "Complete"}
+            </s-badge>
+            <s-text color="subdued">Last scan: {finishedAt.toLocaleString()}</s-text>
+          </s-stack>
         ) : (
           <s-paragraph>No scans have been run yet.</s-paragraph>
+        )}
+
+        {!isRunning && summary?.errorMessage && (
+          <s-banner
+            tone={summary.status === "FAILED" ? "critical" : "warning"}
+            heading={
+              summary.status === "FAILED"
+                ? "The last scan failed"
+                : "The scan finished, but fix proposals couldn't be generated"
+            }
+          >
+            <s-paragraph>{describeScanError(summary.errorMessage)}</s-paragraph>
+          </s-banner>
         )}
       </s-section>
 
@@ -193,6 +231,13 @@ export default function Index() {
               <s-stack direction="block" gap="base">
                 <s-text color="subdued">Issues found</s-text>
                 <s-heading>{summary.totalIssuesFound}</s-heading>
+              </s-stack>
+            </s-box>
+            <s-box padding="base" borderWidth="base" borderRadius="base">
+              <s-stack direction="block" gap="base">
+                <s-text color="subdued">Pending fix proposals</s-text>
+                <s-heading>{pendingProposals}</s-heading>
+                {pendingProposals > 0 && <s-link href="/app/review">Review fixes</s-link>}
               </s-stack>
             </s-box>
           </s-stack>

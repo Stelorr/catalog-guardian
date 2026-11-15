@@ -1,6 +1,7 @@
+import { AppProvider } from "@shopify/shopify-app-react-router/react";
+import { useState } from "react";
 import { redirect, Form, useLoaderData } from "react-router";
 import { login } from "../../shopify.server";
-import styles from "./styles.module.css";
 
 export const loader = async ({ request }) => {
   const url = new URL(request.url);
@@ -12,43 +13,48 @@ export const loader = async ({ request }) => {
   return { showForm: Boolean(login) };
 };
 
-export default function App() {
+export default function Landing() {
   const { showForm } = useLoaderData();
+  const [shop, setShop] = useState("");
 
   return (
-    <div className={styles.index}>
-      <div className={styles.content}>
-        <h1 className={styles.heading}>A short heading about [your app]</h1>
-        <p className={styles.text}>
-          A tagline about [your app] that describes your value proposition.
-        </p>
+    <AppProvider embedded={false}>
+      <s-page heading="Catalog Guardian">
+        <s-section heading="Clean up inconsistent metafield data">
+          <s-paragraph>
+            Catalog Guardian scans your products against your metafield definitions,
+            finds values that are missing, empty or written inconsistently (&quot;10in&quot;,
+            &quot;12 inches&quot;, &quot;10 IN&quot;), and proposes safe fixes you approve one by one.
+          </s-paragraph>
+          <s-unordered-list>
+            <s-list-item>Scan every product against its metafield definitions.</s-list-item>
+            <s-list-item>
+              Review proposed unit, casing and naming fixes, and approve or reject each one.
+            </s-list-item>
+            <s-list-item>
+              Apply approved fixes safely: anything edited in Shopify since the scan is
+              skipped, never overwritten.
+            </s-list-item>
+          </s-unordered-list>
+        </s-section>
+
         {showForm && (
-          <Form className={styles.form} method="post" action="/auth/login">
-            <label className={styles.label}>
-              <span>Shop domain</span>
-              <input className={styles.input} type="text" name="shop" />
-              <span>e.g: my-shop-domain.myshopify.com</span>
-            </label>
-            <button className={styles.button} type="submit">
-              Log in
-            </button>
+          <Form method="post" action="/auth/login">
+            <s-section heading="Open the app">
+              <s-text-field
+                name="shop"
+                label="Shop domain"
+                details="example.myshopify.com"
+                value={shop}
+                onChange={(e) => setShop(e.currentTarget.value)}
+              ></s-text-field>
+              <s-button type="submit" variant="primary">
+                Log in
+              </s-button>
+            </s-section>
           </Form>
         )}
-        <ul className={styles.list}>
-          <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
-          </li>
-          <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
-          </li>
-          <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
-          </li>
-        </ul>
-      </div>
-    </div>
+      </s-page>
+    </AppProvider>
   );
 }
