@@ -58,6 +58,8 @@ scan  ->  ScanResult  ->  generateProposals  ->  FixProposal  ->  Review page  -
 
 **Optimistic concurrency.** Applying a proposal first re-reads the current value from Shopify and skips it if it changed since the scan. The write then carries the metafield's `compareDigest`, so an edit made between the read and the write is rejected by Shopify (`STALE_OBJECT` / `INVALID_COMPARE_DIGEST`) and also ends as STALE. Each product gets its own `metafieldsSet` call, because Shopify applies a batched call atomically and one bad product would block the rest.
 
+**Stale results are pruned.** Each completed scan deletes the shop's results it didn't see (products or definitions that no longer exist), so the Issues list never shows ghosts. A failed or partial scan deletes nothing, and a late-finishing scan can't delete rows written by a newer one.
+
 **Failures are visible.** A failed scan saves its error message and the step it failed in on the scan run, and a scan stuck in RUNNING for more than 5 minutes (for example after a server restart) is treated as failed so it can't block new scans.
 
 ## Setup
@@ -102,6 +104,7 @@ There is no test framework. Each check is a plain Node script that exits non-zer
 npm run test:classify    # scan status classification
 npm run test:normalize   # normalizer rules; every value in every fixture is checked
 npm run test:format      # display text for weight/dimension values on the Review page
+npm run test:prune       # stale-result pruning (fake admin, throwaway shops in the local database)
 npm run lint
 npm run test:stale -- <shop>.myshopify.com   # interactive: edit a metafield in the admin while it waits
 ```

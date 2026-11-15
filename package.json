@@ -19,6 +19,7 @@
     "test:classify": "node scripts/test-classify.js",
     "test:normalize": "node scripts/test-normalize.js",
     "test:format": "node scripts/test-format.js",
+    "test:prune": "node scripts/test-prune.js",
     "seed": "node --env-file=.env scripts/seed-messy-catalog.js",
     "demo:reset": "node --env-file=.env scripts/demo-reset.js",
     "test:stale": "node --env-file=.env scripts/test-stale-apply.js",

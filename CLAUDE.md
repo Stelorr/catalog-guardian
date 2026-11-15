@@ -70,7 +70,10 @@ doesn't have to re-query Shopify on every page load:
   server restart can't block new scans.
 - `ScanResult`: one row per product and metafield definition, upserted on
   every scan. `status` is OK, MISSING, EMPTY or TYPE_MISMATCH. `flagReason`
-  is set when a normalizer rule saw an outlier it couldn't safely fix.
+  is set when a normalizer rule saw an outlier it couldn't safely fix. A
+  completed scan deletes the shop's rows it didn't touch (removed products
+  or definitions), plus PENDING proposals left without a row. A failed or
+  partial scan never deletes anything.
 - `FixProposal`: a suggested UNIT, CASING or NAMING fix for an OK value,
   generated after each complete scan. A scan replaces only PENDING rows;
   APPROVED, REJECTED, APPLIED, FAILED and STALE rows are never touched, and a
@@ -93,13 +96,15 @@ non-zero on failure:
   value in each fixture is checked, so a spurious proposal fails too.
 - `npm run test:format`: display text for weight, dimension and volume
   values, and the one-line description of an applied fix (`describeFix`).
+- `npm run test:prune`: pruning of stale scan results, against a fake admin
+  and throwaway shops in the local database (no Shopify access).
 - `npm run test:stale -- <shop>.myshopify.com`: interactive, against a dev
   store. You edit a metafield in the admin while it waits; it confirms the
   apply path ends STALE and overwrites nothing.
 
-Run the first three, `npm run lint` and `npm run build` after every change.
-After every feature, also list manual checks to run against a dev store
-using `shopify app dev`.
+Run the non-interactive tests, `npm run lint` and `npm run build` after every
+change. After every feature, also list manual checks to run against a dev
+store using `shopify app dev`.
 
 Dev-store tools (they write to a store, so they are not tests):
 

@@ -222,6 +222,49 @@ function describeError(error) {
   return [error?.message ?? String(error), ...frames].join("\n").slice(0, MAX_ERROR_LENGTH);
 }
 
+// Deletes this shop's results that a completed scan didn't touch: they belong
+// to products or metafield definitions that no longer exist, and would
+// otherwise sit in the Issues list forever. Call only after a scan has
+// processed everything; a partial scan would delete rows it just hadn't
+// reached yet.
+//
+// Rows are matched by scanRunId (every scan rewrites it on each row it
+// sees). The lastCheckedAt cutoff protects a newer scan running at the same
+// time, e.g. when this one was expired as stale but finished late: its rows
+// were checked after this run started, so they're kept.
+//
+// PENDING proposals left without a result row are deleted in the same
+// transaction. Decided proposals (approved, rejected, applied, failed,
+// stale) are never touched. The proposals delete is raw SQL because Prisma
+// can't delete by a join.
+export async function pruneStaleResults({ shop, scanRunId }) {
+  const run = await prisma.scanRun.findUniqueOrThrow({
+    where: { id: scanRunId },
+    select: { startedAt: true },
+  });
+
+  const [results, proposals] = await prisma.$transaction([
+    prisma.scanResult.deleteMany({
+      where: {
+        shop,
+        scanRunId: { not: scanRunId },
+        lastCheckedAt: { lt: run.startedAt },
+      },
+    }),
+    prisma.$executeRaw`
+      DELETE FROM "FixProposal"
+      WHERE "shop" = ${shop} AND "status" = 'PENDING' AND NOT EXISTS (
+        SELECT 1 FROM "ScanResult" s
+        WHERE s."shop" = "FixProposal"."shop"
+          AND s."productId" = "FixProposal"."productId"
+          AND s."namespace" = "FixProposal"."namespace"
+          AND s."key" = "FixProposal"."key"
+      )`,
+  ]);
+
+  return { results: results.count, proposals };
+}
+
 export async function runScan({ admin, shop, scanRunId, log = () => {} }) {
   let totalProductsScanned = 0;
   let totalIssuesFound = 0;
@@ -316,15 +359,24 @@ export async function runScan({ admin, shop, scanRunId, log = () => {} }) {
       }
     }
 
-    // Only a complete scan generates proposals: partial data would skew the
-    // majority patterns. A failure here doesn't undo a good scan, so it's
-    // recorded on the run while the run stays COMPLETE.
-    let proposalError = null;
+    // Pruning and proposal generation only run after a complete scan: with
+    // partial data, pruning would delete rows the scan hadn't reached and
+    // proposals would be built on skewed majorities. A failure in either
+    // doesn't undo a good scan, so it's recorded on the run while the run
+    // stays COMPLETE.
+    const warnings = [];
+    try {
+      const pruned = await pruneStaleResults({ shop, scanRunId });
+      log(`Pruned ${pruned.results} stale result(s) and ${pruned.proposals} orphaned proposal(s)`);
+    } catch (error) {
+      warnings.push(`[pruning stale results] ${describeError(error)}`);
+      log(`Pruning stale results failed: ${error.message}`);
+    }
     try {
       const generated = await generateProposals({ shop, scanRunId });
       log(`Generated ${generated.proposals} fix proposal(s) and ${generated.flags} flag(s)`);
     } catch (error) {
-      proposalError = `[generating proposals] ${describeError(error)}`.slice(0, MAX_ERROR_LENGTH);
+      warnings.push(`[generating proposals] ${describeError(error)}`);
       log(`Generating proposals failed: ${error.message}`);
     }
 
@@ -335,7 +387,7 @@ export async function runScan({ admin, shop, scanRunId, log = () => {} }) {
         completedAt: new Date(),
         totalProductsScanned,
         totalIssuesFound,
-        errorMessage: proposalError,
+        errorMessage: warnings.length > 0 ? warnings.join("\n").slice(0, MAX_ERROR_LENGTH) : null,
       },
     });
 
